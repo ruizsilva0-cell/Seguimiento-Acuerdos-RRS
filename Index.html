@@ -1,0 +1,256 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#702b45">
+<title>SADR | Seguimiento Ejecutivo</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#f5f4f2;color:#292929}
+header{background:#702b45;color:white;padding:22px 18px}
+header h1{font-size:23px;margin:0 0 5px}
+header p{margin:0;opacity:.9;font-size:13px}
+main{max-width:850px;margin:auto;padding:16px}
+.card{background:white;border-radius:15px;padding:18px;margin-bottom:15px;box-shadow:0 2px 8px #0000000b}
+h2{font-size:18px;margin:0 0 14px}
+label{display:block;font-size:13px;font-weight:650;margin:12px 0 5px}
+input,textarea,select{width:100%;font:inherit;padding:12px;border:1px solid #ccc;border-radius:9px;background:white}
+textarea{min-height:115px;resize:vertical}
+button{font:inherit;border:0;border-radius:9px;padding:11px 15px;cursor:pointer;background:#702b45;color:white}
+button.secondary{background:#eee;color:#333}
+button.danger{background:#a02f3c}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.stat{text-align:center;background:white;padding:13px 5px;border-radius:12px}
+.stat b{display:block;font-size:25px;color:#702b45}
+.stat span{font-size:11px}
+.item{border-top:1px solid #ddd;padding:14px 0}
+.item h3{margin:5px 0;font-size:16px}
+.item p{white-space:pre-wrap;overflow-wrap:anywhere}
+.small{font-size:12px;color:#666}
+.tag{display:inline-block;background:#eee;border-radius:15px;padding:4px 9px;font-size:12px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.notice{font-size:12px;color:#665a54}
+@media(max-width:520px){.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+<h1>SADR | Seguimiento Ejecutivo</h1>
+<p>Prototipo personal · Prueba con datos ficticios</p>
+</header>
+<main>
+<section class="stats">
+<div class="stat"><b id="total">0</b><span>Total</span></div>
+<div class="stat"><b id="pending">0</b><span>Pendientes</span></div>
+<div class="stat"><b id="closed">0</b><span>Concluidos</span></div>
+</section>
+
+<section class="card">
+<h2>Nueva instrucción</h2>
+<label for="instruction">Instrucción o acuerdo</label>
+<textarea id="instruction" placeholder="Toca el campo y utiliza el micrófono del teclado del iPad"></textarea>
+<p class="notice">Revisa la transcripción antes de guardar. Utiliza solo datos ficticios.</p>
+<div class="row">
+<div>
+<label for="owner">Responsable</label>
+<input id="owner" placeholder="Ej. Colaborador A">
+</div>
+<div>
+<label for="deadline">Fecha límite</label>
+<input id="deadline" type="date">
+</div>
+</div>
+<div class="row">
+<div>
+<label for="priority">Prioridad</label>
+<select id="priority">
+<option>Normal</option>
+<option>Alta</option>
+<option>Urgente</option>
+</select>
+</div>
+<div>
+<label for="status">Estado inicial</label>
+<select id="status">
+<option>Pendiente</option>
+<option>En proceso</option>
+</select>
+</div>
+</div>
+<div class="actions">
+<button onclick="saveTask()">Guardar instrucción</button>
+<button class="secondary" onclick="clearForm()">Limpiar</button>
+</div>
+</section>
+
+<section class="card">
+<h2>Seguimiento de instrucciones</h2>
+<label for="filter">Filtrar por estado</label>
+<select id="filter" onchange="render()">
+<option value="Todos">Todos</option>
+<option>Pendiente</option>
+<option>En proceso</option>
+<option>En validación</option>
+<option>Concluido</option>
+</select>
+<div id="tasks"></div>
+<div class="actions">
+<button class="secondary" onclick="exportCSV()">Exportar CSV</button>
+<button class="secondary" onclick="exportJSON()">Respaldar JSON</button>
+<button class="danger" onclick="deleteAll()">Borrar datos de prueba</button>
+</div>
+<p class="notice">La información permanece en este navegador. Si borras los datos del sitio o cambias de dispositivo, puede perderse. Exporta respaldos periódicamente.</p>
+</section>
+</main>
+<script>
+const KEY="sadr_demo_v1";
+let tasks=[];
+try {
+  const saved=JSON.parse(localStorage.getItem(KEY)||"[]");
+  tasks=Array.isArray(saved)?saved:[];
+} catch(e){tasks=[]}
+
+function persist(){
+  try {
+    localStorage.setItem(KEY,JSON.stringify(tasks));
+    return true;
+  }catch(e){
+    alert("No se pudo guardar en este navegador. Exporta un respaldo.");
+    return false;
+  }
+}
+function clearForm(){
+  ["instruction","owner","deadline"].forEach(id=>
+    document.getElementById(id).value="");
+}
+function saveTask(){
+  const text=document.getElementById("instruction").value.trim();
+  const owner=document.getElementById("owner").value.trim();
+  if(!text||!owner){
+    alert("Escribe la instrucción y el responsable.");
+    return;
+  }
+  const task={
+    id:"SADR-"+Date.now(),
+    instruction:text,
+    owner:owner,
+    deadline:document.getElementById("deadline").value,
+    priority:document.getElementById("priority").value,
+    status:document.getElementById("status").value,
+    progress:[],
+    created:new Date().toISOString()
+  };
+  tasks.unshift(task);
+  if(!persist()){tasks.shift();return}
+  clearForm();render();
+  alert("Instrucción registrada.");
+}
+function escapeHTML(value){
+  return String(value??"").replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",
+    '"':"&quot;","'":"&#39;"
+  })[c]);
+}
+function changeStatus(id,value){
+  const t=tasks.find(x=>x.id===id);
+  if(!t)return;
+  if(value==="Concluido"&&!confirm(
+    "¿Validas el cierre de esta instrucción?"))return;
+  t.status=value;
+  t.progress.push({
+    date:new Date().toISOString(),
+    note:"Estado actualizado a: "+value
+  });
+  persist();render();
+}
+function addProgress(id){
+  const note=prompt("Describe el avance (sin datos reales):");
+  if(!note||!note.trim())return;
+  const t=tasks.find(x=>x.id===id);
+  if(!t)return;
+  t.progress.push({
+    date:new Date().toISOString(),
+    note:note.trim()
+  });
+  persist();render();
+}
+function render(){
+  document.getElementById("total").textContent=tasks.length;
+  document.getElementById("pending").textContent=
+    tasks.filter(x=>x.status!=="Concluido").length;
+  document.getElementById("closed").textContent=
+    tasks.filter(x=>x.status==="Concluido").length;
+  const filter=document.getElementById("filter").value;
+  const selected=tasks.filter(x=>
+    filter==="Todos"||x.status===filter);
+  const container=document.getElementById("tasks");
+  container.innerHTML="";
+  if(!selected.length){
+    container.textContent="No hay instrucciones para mostrar.";
+    return;
+  }
+  selected.forEach(t=>{
+    const article=document.createElement("article");
+    article.className="item";
+    const history=(t.progress||[]).map(p=>
+      "<li>"+escapeHTML(new Date(p.date).toLocaleString("es-MX"))+
+      ": "+escapeHTML(p.note)+"</li>").join("");
+    article.innerHTML=`
+      <span class="tag">${escapeHTML(t.status)}</span>
+      <h3>${escapeHTML(t.id)}</h3>
+      <p>${escapeHTML(t.instruction)}</p>
+      <div class="small">
+      Responsable: ${escapeHTML(t.owner)}<br>
+      Prioridad: ${escapeHTML(t.priority)}<br>
+      Fecha límite: ${escapeHTML(t.deadline||"Sin definir")}
+      </div>
+      <label>Actualizar estado</label>
+      <select class="state">
+        ${["Pendiente","En proceso","En validación","Concluido"]
+          .map(s=>`<option ${s===t.status?"selected":""}>${s}</option>`)
+          .join("")}
+      </select>
+      <div class="actions">
+        <button class="progress">Registrar avance</button>
+      </div>
+      ${history?`<p class="small">Bitácora</p><ul>${history}</ul>`:""}
+    `;
+    article.querySelector(".state").onchange=e=>
+      changeStatus(t.id,e.target.value);
+    article.querySelector(".progress").onclick=()=>
+      addProgress(t.id);
+    container.appendChild(article);
+  });
+}
+function download(name,content,type){
+  const blob=new Blob([content],{type});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download=name;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function exportJSON(){
+  download("sadr-respaldo.json",
+    JSON.stringify(tasks,null,2),"application/json");
+}
+function exportCSV(){
+  const columns=["id","instruction","owner",
+    "deadline","priority","status","created"];
+  const quote=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+  const rows=[columns.join(","),
+    ...tasks.map(t=>columns.map(c=>quote(t[c])).join(","))];
+  download("sadr-seguimiento.csv",
+    "\uFEFF"+rows.join("\r\n"),"text/csv;charset=utf-8");
+}
+function deleteAll(){
+  if(!confirm("¿Borrar todos los datos de prueba?"))return;
+  tasks=[];persist();render();
+}
+render();
+</script>
+</body>
+</html>
